@@ -1,4 +1,7 @@
-# metgen.github.io
+# My scripts
+
+Custom MOTD:
+
 ```bash
-curl
+bash <(wget -qO- https://metgen.github.io/scripts/dashboard.sh)
 ```
