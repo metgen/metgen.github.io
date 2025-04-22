@@ -177,7 +177,7 @@ fi
 
 # Температура (если доступно)
 temp=$(cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | awk '{print $1/1000}' | sort -nr | head -1)
-[ -n "$temp" ] && temp_status="🌡️  ${temp}°C" || temp_status=""
+[ -n "$temp" ] && temp_status="${temp}°C" || temp_status=""
 
 # Вывод информации
 printf "${bold}${cyan}🏠 Хост:          ${normal} %s\n" "$(hostname -f)"
@@ -196,7 +196,7 @@ printf "${bold}${cyan}👥 SSH:           ${normal} %s пользователе�
 printf "${bold}${cyan}🌐 IP:            ${normal} Локальный: ${ip_local} | Публичный: ${ip_public}\n"
 printf "${bold}${cyan}🔗 IPv6:          ${normal} %s\n" "$ip6"
 printf "${bold}${cyan}🔄 Обновления:    ${normal} %b\n" "$update_msg"
-[ -n "$temp_status" ] && printf "${bold}${cyan}${temp_status}\n"
+[ -n "$temp_status" ] && printf "${bold}${cyan}🌡️Temperature:    ${normal} %s\n" ${temp_status}"
 echo "$separator"
 
 # Краткое резюме
