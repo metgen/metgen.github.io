@@ -46,13 +46,14 @@ if [ -n "$REMOTE_VERSION" ] && [ "$REMOTE_VERSION" != "$CURRENT_VERSION" ]; then
     echo ""
 fi
 
+timezone_str=$(timedatectl status | grep -i "time zone" | awk '{print $3}')
+
 echo ""
 echo "${bold}🚀 System Dashboard $(date +'%Y-%m-%d %H:%M:%S')${normal} (${timezone_str})${normal}"
 echo "$separator"
 
 hostname_str=$(hostname -f)
 uptime_str=$(uptime -p)
-timezone_str=$(timedatectl status | grep -i "time zone" | awk '{print $3}')
 loadavg=$(cut -d ' ' -f1-3 /proc/loadavg)
 cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print 100 - $8 "%"}')
 mem_data=$(free -m | awk '/Mem:/ {printf "%.0f%% (%dMB/%dMB)", $3/$2*100, $3, $2}')
