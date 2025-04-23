@@ -3,7 +3,6 @@
 DASHBOARD_FILE="/etc/update-motd.d/99-dashboard"
 FORCE_MODE=false
 
-# Обработка аргументов
 for arg in "$@"; do
     case $arg in
         --force)
@@ -31,34 +30,41 @@ TMP_FILE=$(mktemp)
 # Создание MOTD скрипта
 /bin/cat > "$TMP_FILE" << 'EOF'
 #!/bin/bash
-bold=$(tput bold)
-normal=$(tput sgr0)
-blue=$(tput setaf 4)
-green=$(tput setaf 2)
-red=$(tput setaf 1)
-yellow=$(tput setaf 3)
-cyan=$(tput setaf 6)
-white=$(tput setaf 7)
-ok="${green}●${normal}"
-fail="${red}●${normal}"
-warn="${yellow}●${normal}"
-separator="${blue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${normal}"
+CURRENT_VERSION="v0.1.0"
+REMOTE_URL="https://metgen.github.io/scripts/dashboard.sh"
+REMOTE_VERSION=$(curl -s "$REMOTE_URL" | grep '^CURRENT_VERSION=' | cut -d= -f2 | tr -d '"')
 
-echo "${normal}"
+ok="✅"
+fail="❌"
+warn="⚠️"
+separator="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+if [ -n "$REMOTE_VERSION" ] && [ "$REMOTE_VERSION" != "$CURRENT_VERSION" ]; then
+    echo "${warn} Доступна новая версия MOTD-дашборда: $REMOTE_VERSION (текущая: $CURRENT_VERSION)"
+    echo "💡 Обновление:"
+    echo "   curl -fsSL $REMOTE_URL | bash -s -- --force"
+    echo ""
+fi
+
+echo ""
+echo "${bold}🚀 System Dashboard $(date +'%Y-%m-%d %H:%M:%S')${normal} (${timezone_str})${normal}"
 echo "$separator"
 
+hostname_str=$(hostname -f)
 uptime_str=$(uptime -p)
+timezone_str=$(timedatectl status | grep -i "time zone" | awk '{print $3}')
 loadavg=$(cut -d ' ' -f1-3 /proc/loadavg)
 cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print 100 - $8 "%"}')
 mem_data=$(free -m | awk '/Mem:/ {printf "%.0f%% (%dMB/%dMB)", $3/$2*100, $3, $2}')
+swap_data=$(free -m | awk '/Swap:/ {if ($2!=0) printf "%.0f%% (%dMB/%dMB)", $3/$2*100, $3, $2; else print "N/A"}')
 disk_used=$(df -h / | awk 'NR==2 {print $5}' | tr -d '%')
 disk_line=$(df -h / | awk 'NR==2 {print $5 " (" $3 " / " $2 ")"}')
 if [ "$disk_used" -ge 95 ]; then
-    disk_status="${red}${disk_line}${normal} ${red}[CRITICAL: Free up space immediately!]${normal}"
+    disk_status="$fail $disk_line [CRITICAL: Free up space immediately!]"
 elif [ "$disk_used" -ge 85 ]; then
-    disk_status="${yellow}${disk_line}${normal} ${yellow}[Warning: High usage]${normal}"
+    disk_status="$warn $disk_line [Warning: High usage]"
 else
-    disk_status="${green}${disk_line}${normal}"
+    disk_status="$ok $disk_line"
 fi
 traffic=$(vnstat --oneline 2>/dev/null | awk -F\; '{print $10 " ↓ / " $11 " ↑"}')
 ip_local=$(hostname -I | awk '{print $1}')
@@ -78,11 +84,13 @@ if command -v docker &>/dev/null; then
     docker_running=$(docker ps -q | wc -l)
     docker_stopped=$((docker_total - docker_running))
     docker_msg="$ok ${docker_running} running / ${docker_stopped} stopped"
-    bad_containers=$(docker ps -a --filter "status=exited" --filter "status=restarting" --format '{{.Names}} ({{.Status}})')
+    bad_containers=$(docker ps -a --filter "status=exited" --filter "status=restarting" --format '⛔ {{.Names}} ({{.Status}})')
     if [ -n "$bad_containers" ]; then
-        docker_msg="$fail Issues: $docker_running running / $docker_stopped stopped
-       ⛔ $bad_containers"
+        docker_msg="$fail Issues: $docker_running running / $docker_stopped stopped"
+        docker_msg_extra=$(echo "$bad_containers" | sed 's/^/                    /')
     fi
+
+
 else
     docker_msg="$warn not installed"
 fi
@@ -93,7 +101,7 @@ ssh_ips=$(who | awk '{print $5}' | tr -d '()' | sort | uniq | paste -sd ', ' -)
 if command -v fail2ban-client &>/dev/null; then
     fail2ban_status="$ok active"
 else
-    fail2ban_status="$warn not installed"
+    fail2ban_status="$fail not installed"
 fi
 
 if command -v ufw &>/dev/null; then
@@ -101,39 +109,107 @@ if command -v ufw &>/dev/null; then
     if [[ "$ufw_status" == "active" ]]; then
         ufw_status="$ok enabled"
     else
-        ufw_status="$warn disabled"
+        ufw_status="$fail disabled"
     fi
 else
-    ufw_status="$warn not installed"
+    ufw_status="$fail not installed"
 fi
 
 updates=$(apt list --upgradable 2>/dev/null | grep -v "Listing" | wc -l)
 update_msg="${updates} package(s) can be updated"
 
-printf "${bold}🧠 Uptime:        ${normal} %s\n" "$uptime_str"
-printf "${bold}🧮 Load Average:  ${normal} %s\n" "$loadavg"
-printf "${bold}⚙️  CPU Usage:     ${normal} %s\n" "$cpu_usage"
-printf "${bold}💾 RAM Usage:     ${normal} %s\n" "$mem_data"
-printf "${bold}💽 Disk Usage:    ${normal} %b\n" "$disk_status"
-printf "${bold}📡 Net Traffic:   ${normal} %s\n" "$traffic"
-printf "${bold}🔐 CrowdSec:      ${normal} %b\n" "$crowdsec_status"
-printf "${bold}🐳 Docker:        ${normal} %b\n" "$docker_msg"
-printf "${bold}👮 Fail2ban:      ${normal} %s\n" "$fail2ban_status"
-printf "${bold}🧱 UFW Firewall:  ${normal} %s\n" "$ufw_status"
-printf "${bold}👥 SSH Sessions:  ${normal} %s\n" "$ssh_users"
-printf "${bold}🔗 SSH IPs:       ${normal} %s\n" "$ssh_ips"
-printf "${bold}🌐 IP Address:    ${normal} Local: $ip_local | Public: $ip_public\n"
-printf "${bold}🌍 IPv6 Address:   ${normal} $ip6\n"
-printf "${bold}⬆️  Updates:       ${normal} $update_msg\n"
+# 🔐 Безопасность: проверка настроек SSH
+ssh_port=$(grep -Ei '^Port ' /etc/ssh/sshd_config | awk '{print $2}' | head -n1)
+[ -z "$ssh_port" ] && ssh_port=22
+[ "$ssh_port" != "22" ] && ssh_port_status="$ok non-standard port ($ssh_port)" || ssh_port_status="$warn default port (22)"
+
+permit_root=$(sshd -T 2>/dev/null | grep -i permitrootlogin | awk '{print $2}')
+case "$permit_root" in
+    yes)
+        root_login_status="$fail enabled"
+        ;;
+    no)
+        root_login_status="$ok disabled"
+        ;;
+    without-password|prohibit-password|forced-commands-only)
+        root_login_status="$warn limited ($permit_root)"
+        ;;
+    *)
+        root_login_status="$warn unknown ($permit_root)"
+        ;;
+esac
+
+password_auth=$(grep -Ei '^PasswordAuthentication' /etc/ssh/sshd_config | awk '{print $2}')
+[ "$password_auth" != "yes" ] && password_auth_status="$ok disabled" || password_auth_status="$fail enabled"
+
+if dpkg -s unattended-upgrades &>/dev/null && command -v unattended-upgrade &>/dev/null; then
+    if grep -q 'Unattended-Upgrade "1";' /etc/apt/apt.conf.d/20auto-upgrades 2>/dev/null; then
+        if systemctl is-enabled apt-daily.timer &>/dev/null && systemctl is-enabled apt-daily-upgrade.timer &>/dev/null; then
+            if grep -q "Installing" /var/log/unattended-upgrades/unattended-upgrades.log 2>/dev/null; then
+                auto_update_status="$ok working"
+            else
+                auto_update_status="$ok enabled"
+            fi
+        else
+            auto_update_status="$warn config enabled, timers disabled"
+        fi
+    else
+        auto_update_status="$warn installed, config disabled"
+    fi
+else
+    auto_update_status="$fail not installed"
+fi
+
+
+echo "🏠 Host:          $hostname_str"
+echo "⏱️ Uptime:        $uptime_str"
+echo "🧮 Load Average:  $loadavg"
+echo "⚙️  CPU Usage:     $cpu_usage"
+echo "💾 RAM Usage:     $mem_data"
+echo "🔀 SWAP Usage:    $swap_data"
+echo "💽 Disk Usage:    $disk_status"
+echo "📡 Net Traffic:   $traffic"
+echo "🔐 CrowdSec:      $crowdsec_status"
+echo -e "🐳 Docker:        $docker_msg"
+[ -n "$docker_msg_extra" ] && echo -e "$docker_msg_extra"
+echo "👮 Fail2ban:      $fail2ban_status"
+echo "🧱 UFW Firewall:  $ufw_status"
+echo "👥 SSH Sessions:  $ssh_users"
+echo "🔗 SSH IPs:       $ssh_ips"
+echo "🌐 IP Address:    Local: $ip_local | Public: $ip_public"
+echo "🌍 IPv6 Address:   $ip6"
+echo "🧬 Kernel:         $(uname -r)"
+echo "⬆️  Updates:       $update_msg"
+echo "🔐 SSH Port:      $ssh_port_status"
+echo "🚫 Root Login:    $root_login_status"
+echo "🔑 Password Auth: $password_auth_status"
+echo "📦 Auto Updates:  $auto_update_status"
+echo "🆕 Dashboard Ver: $CURRENT_VERSION"
 echo "$separator"
 echo ""
-echo "${bold}✔️  SYSTEM CHECK SUMMARY:${normal}"
+echo "✔️  SYSTEM CHECK SUMMARY:"
 [ "$updates" -eq 0 ] && echo "$ok Packages up to date" || echo "$warn Updates available"
 [[ "$docker_msg" == *"Issues:"* ]] && echo "$fail Docker issue" || echo "$ok Docker OK"
 [[ "$crowdsec_status" =~ "$fail" ]] && echo "$fail CrowdSec not working" || echo "$ok CrowdSec OK"
 [[ "$fail2ban_status" =~ "$fail" ]] && echo "$fail Fail2ban not installed" || echo "$ok Fail2ban OK"
-[[ "$ufw_status" =~ "$fail" || "$ufw_status" =~ "$warn" ]] && echo "$warn UFW not enabled" || echo "$ok UFW OK"
+[[ "$ufw_status" =~ "$fail" ]] && echo "$fail UFW not enabled" || echo "$ok UFW OK"
+[[ "$root_login_status" =~ "$fail" ]] && echo "$fail Root login enabled" || echo "$ok Root login disabled"
 echo ""
+
+echo ""
+if [[ "$auto_update_status" =~ "$fail" ]]; then
+    echo "📌 Auto-Upgrades not installed. To install and enable:"
+    echo "   apt install unattended-upgrades -y"
+    echo "   dpkg-reconfigure --priority=low unattended-upgrades"
+elif [[ "$auto_update_status" =~ "timers disabled" ]]; then
+    echo "📌 Auto-Upgrades config enabled, but timers are off. To enable:"
+    echo "   systemctl enable --now apt-daily.timer apt-daily-upgrade.timer"
+elif [[ "$auto_update_status" =~ "config disabled" ]]; then
+    echo "📌 Auto-Upgrades installed, but config disabled. To fix:"
+    echo "   echo 'APT::Periodic::Unattended-Upgrade \"1\";' >> /etc/apt/apt.conf.d/20auto-upgrades"
+    echo "   systemctl restart apt-daily.timer apt-daily-upgrade.timer"
+fi
+
 EOF
 
 # Предпросмотр
