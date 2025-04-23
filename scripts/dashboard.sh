@@ -30,7 +30,7 @@ TMP_FILE=$(mktemp)
 # Создание MOTD скрипта
 /bin/cat > "$TMP_FILE" << 'EOF'
 #!/bin/bash
-CURRENT_VERSION="v0.1.0"
+CURRENT_VERSION="v0.1.1"
 REMOTE_URL="https://metgen.github.io/scripts/dashboard.sh"
 REMOTE_VERSION=$(curl -s "$REMOTE_URL" | grep '^CURRENT_VERSION=' | cut -d= -f2 | tr -d '"')
 
@@ -49,7 +49,7 @@ fi
 timezone_str=$(timedatectl status | grep -i "time zone" | awk '{print $3}')
 
 echo ""
-echo "${bold}🚀 System Dashboard $(date +'%Y-%m-%d %H:%M:%S')${normal} (${timezone_str})${normal}"
+echo "${bold}🚀 System Dashboard $(date +'%Y-%m-%d %H:%M:%S')${normal} (${timezone_str})"
 echo "$separator"
 
 hostname_str=$(hostname -f)
