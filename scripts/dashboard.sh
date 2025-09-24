@@ -30,7 +30,7 @@ TMP_FILE=$(mktemp)
 # Создание MOTD скрипта
 /bin/cat > "$TMP_FILE" << 'EOF'
 #!/bin/bash
-CURRENT_VERSION="v0.1.3"
+CURRENT_VERSION="v0.1.4"
 REMOTE_URL="https://metgen.github.io/scripts/dashboard.sh"
 REMOTE_VERSION=$(curl -s "$REMOTE_URL" | grep '^CURRENT_VERSION=' | cut -d= -f2 | tr -d '"')
 
@@ -74,7 +74,11 @@ ip6=$(ip -6 addr show scope global | grep inet6 | awk '{print $2}' | cut -d/ -f1
 [ -z "$ip6" ] && ip6="n/a"
 
 if systemctl is-active crowdsec &>/dev/null; then
-    bouncers=$(cscli bouncers list -o raw 2>/dev/null | awk '{print $1 ": " $2}' | paste -sd ', ')
+    # Читаем список bouncer-ов из JSON
+    bouncers=$(cscli bouncers list -o json 2>/dev/null \
+        | jq -r '.[] | "\(.name): \(.status)"' \
+        | paste -sd ', ')
+    
     if [ -z "$bouncers" ]; then
         crowdsec_status="$warn active, but no bouncers"
     else
