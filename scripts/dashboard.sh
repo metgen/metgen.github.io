@@ -30,7 +30,7 @@ TMP_FILE=$(mktemp)
 # Создание MOTD скрипта
 /bin/cat > "$TMP_FILE" << 'EOF'
 #!/bin/bash
-CURRENT_VERSION="v0.1.4"
+CURRENT_VERSION="v0.1.5"
 REMOTE_URL="https://metgen.github.io/scripts/dashboard.sh"
 REMOTE_VERSION=$(curl -s "$REMOTE_URL" | grep '^CURRENT_VERSION=' | cut -d= -f2 | tr -d '"')
 
@@ -76,7 +76,7 @@ ip6=$(ip -6 addr show scope global | grep inet6 | awk '{print $2}' | cut -d/ -f1
 if systemctl is-active crowdsec &>/dev/null; then
     # Читаем список bouncer-ов из JSON
     bouncers=$(cscli bouncers list -o json 2>/dev/null \
-        | jq -r '.[] | "\(.name): \(.status)"' \
+        | jq -r '.[] | "\(.name): " + (if .revoked then "revoked" else "validated" end)' \
         | paste -sd ', ')
     
     if [ -z "$bouncers" ]; then
@@ -87,6 +87,7 @@ if systemctl is-active crowdsec &>/dev/null; then
 else
     crowdsec_status="$fail not running"
 fi
+
 
 
 if command -v docker &>/dev/null; then
